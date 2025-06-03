@@ -9,6 +9,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_svg: ^2.1.0 # For loading SVG assets
+  path_provider: ^2.1.5 # To get app document directory for Hive
+  hive: ^2.2.3 # For local NoSQL database
+  hive_flutter: ^1.1.0 # Flutter integration for Hive
+  path_drawing: ^1.0.1 # For parsing SVG path strings to ui.Path (if needed)
 
 dev_dependencies:
   flutter_test:
@@ -17,3 +22,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/svgs/

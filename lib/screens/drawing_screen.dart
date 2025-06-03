@@ -1,115 +1,265 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:coloring_game/utils/image_flood_fill.dart';
 import 'package:flutter/material.dart';
 
+import '../models/coloring_picture.dart';
+import '../services/picture_service.dart';
 import '../widgets/color_palette.dart';
 import '../widgets/drawing_canvas_painter.dart';
 
 class DrawingScreen extends StatefulWidget {
-  const DrawingScreen({super.key});
+  final PictureService pictureService;
+  const DrawingScreen({super.key, required this.pictureService});
 
   @override
   State<DrawingScreen> createState() => _DrawingScreenState();
 }
 
 class _DrawingScreenState extends State<DrawingScreen> {
-  ui.Path? _currentSvgOutline;
-  Color _selectedDrawingColor =
-      Colors.black; // New: To store the selected drawing color
+  // State variables for the current drawing
+  ui.Picture? _currentSvgOutlinePicture; // SVG picture from flutter_svg
+  ui.Image? _currentDrawingImage; // The image representing the user's drawing
+  Color _selectedDrawingColor = Colors.black; // Color from palette
+
+  // GlobalKey to get the size and position of the CustomPaint widget
+  final GlobalKey _drawingAreaKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _currentSvgOutline = _createSampleSvgOutline();
+    // Load the initial picture and drawing state
+    _loadPictureAndDrawingState(widget.pictureService.currentPicture);
   }
 
-  ui.Path _createSampleSvgOutline() {
-    return ui.Path()
-      ..moveTo(100, 100)
-      ..lineTo(200, 100)
-      ..lineTo(200, 200)
-      ..lineTo(100, 200)
-      ..close();
+  @override
+  void dispose() {
+    // Dispose of the PictureService when the screen is removed
+    widget.pictureService.dispose();
+    super.dispose();
   }
 
-  void _clearSvgOutline() {
-    setState(() {
-      _currentSvgOutline = null;
-    });
-  }
+  /// Loads the SVG for the given picture and its saved drawing state.
+  Future<void> _loadPictureAndDrawingState(ColoringPicture picture) async {
+    // 1. Load SVG outline
+    final loadedSvgPicture = await widget.pictureService
+        .loadCurrentPictureSvg();
 
-  void _loadNewSvgOutline() {
-    setState(() {
-      if (_currentSvgOutline == null ||
-          _currentSvgOutline!.getBounds().width == 100) {
-        _currentSvgOutline = ui.Path()
-          ..addOval(Rect.fromLTWH(50, 50, 200, 150));
-      } else {
-        _currentSvgOutline = _createSampleSvgOutline();
+    // 2. Load saved drawing state (raw pixel data)
+    final Uint8List? savedPixelData = await widget.pictureService
+        .loadDrawingState(picture.id);
+
+    ui.Image? loadedDrawingImage;
+    if (savedPixelData != null) {
+      // Decode the saved pixel data back into a ui.Image
+      // We need width and height to decode the image.
+      // For now, let's assume a default fixed size for the canvas or infer from SVG.
+      // In a real app, you might save width/height along with pixel data.
+      // For demonstration, let's assume a square image for simplicity.
+      // You'd need to ensure the savedPixelData matches the actual canvas dimensions.
+      // If the dimensions change, the old saved image might not fit correctly.
+      try {
+        final ui.ImmutableBuffer buffer =
+            await ui.ImmutableBuffer.fromUint8List(savedPixelData);
+        final ui.Codec codec = await ui.ImageDescriptor.raw(
+          buffer,
+          width: 300, // Example: Assuming a fixed canvas width for saved image
+          height:
+              300, // Example: Assuming a fixed canvas height for saved image
+          rowBytes: 300 * 4, // width * 4 bytes per pixel (RGBA)
+          pixelFormat: ui.PixelFormat.rgba8888,
+        ).instantiateCodec();
+        final ui.FrameInfo frameInfo = await codec.getNextFrame();
+        loadedDrawingImage = frameInfo.image;
+        print('Successfully decoded saved image for ${picture.id}');
+      } catch (e) {
+        print('Error decoding saved image for ${picture.id}: $e');
+        loadedDrawingImage = null; // Fallback if decoding fails
       }
+    }
+
+    setState(() {
+      _currentSvgOutlinePicture = loadedSvgPicture;
+      _currentDrawingImage = loadedDrawingImage;
     });
   }
 
-  // New: Callback method to receive the selected color from ColorPalette
+  // --- Helper to capture current CustomPaint content as ui.Image ---
+  Future<ui.Image> _captureDrawingAreaAsImage() async {
+    final RenderBox? renderBox =
+        _drawingAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) {
+      throw Exception("Drawing area not rendered or GlobalKey not attached.");
+    }
+
+    final Size size = renderBox.size;
+    final ui.PictureRecorder recorder = ui.PictureRecorder();
+    final Canvas canvas = Canvas(recorder);
+
+    // Ensure the background is drawn first (white or existing image)
+    if (_currentDrawingImage != null) {
+      final Rect src = Rect.fromLTWH(
+        0,
+        0,
+        _currentDrawingImage!.width.toDouble(),
+        _currentDrawingImage!.height.toDouble(),
+      );
+      final Rect dst = Rect.fromLTWH(0, 0, size.width, size.height);
+      canvas.drawImageRect(_currentDrawingImage!, src, dst, Paint());
+    } else {
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        Paint()..color = Colors.white,
+      );
+    }
+
+    // Then draw the SVG outline on top (as it's part of the picture).
+    // This is important for flood fill to work correctly on the outlines.
+    if (_currentSvgOutlinePicture != null) {
+      canvas.drawPicture(_currentSvgOutlinePicture!);
+    }
+
+    // If there were any other custom drawing strokes/paths on top of the image,
+    // they would be drawn here as well.
+    // E.g., if you had `List<Path> _drawingStrokes`, you would iterate and draw them.
+
+    final ui.Picture picture = recorder.endRecording();
+    return await picture.toImage(size.width.toInt(), size.height.toInt());
+  }
+
+  // --- Event Handlers ---
   void _handleColorSelected(Color color) {
     setState(() {
       _selectedDrawingColor = color;
-      // You could now use _selectedDrawingColor to update the drawing tool
-      // For example, if you were drawing, this would be the current stroke color.
-      print('Selected drawing color: $_selectedDrawingColor');
     });
+    print('Selected drawing color: $_selectedDrawingColor');
   }
 
-  // Method to capture the current state of the CustomPaint as an Image
-  Future<ui.Image> _captureDrawingAreaAsImage() async {
-    // Create a PictureRecorder to record drawing operations.
-    final ui.PictureRecorder recorder = ui.PictureRecorder();
-    // Create a Canvas that draws onto the recorder.
-    final Canvas canvas = Canvas(recorder);
+  Future<void> _handleFloodFillTap(TapUpDetails details) async {
+    final RenderBox? renderBox =
+        _drawingAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
 
-    // Get the size of the drawing area. You might need to store this in your state
-    // or get it from a GlobalKey on the CustomPaint or its parent.
-    // For simplicity, let's assume a fixed size or derive it from context size.
-    final RenderBox renderBox = context.findRenderObject() as RenderBox;
-    final Size size = renderBox.size; // Get the size of the widget
-
-    // Draw the background color
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = Colors.white,
+    final Offset localPosition = renderBox.globalToLocal(
+      details.globalPosition,
     );
+    final int tapX = localPosition.dx.toInt();
+    final int tapY = localPosition.dy.toInt();
 
-    // Create a temporary painter instance for the current outline
-    final DrawingCanvasPainter currentPainter = DrawingCanvasPainter(
-      svgOutlinePath: _currentSvgOutline,
+    print('Tapped at: ($tapX, $tapY)');
+
+    try {
+      // 1. Capture the current visible state of the canvas as an image
+      ui.Image currentImage = await _captureDrawingAreaAsImage();
+
+      // 2. Determine the target color at the tapped point
+      final ByteData? byteData = await currentImage.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      );
+      if (byteData == null) {
+        print('Failed to get byte data for flood fill target color.');
+        return;
+      }
+      final Uint8List pixels = byteData.buffer.asUint8List();
+      final int pixelIndex = (tapY * currentImage.width + tapX) * 4;
+
+      if (pixelIndex < 0 || pixelIndex >= pixels.length - 3) {
+        print('Tap point out of bounds for pixel data array.');
+        return;
+      }
+
+      final Color targetColorAtTap = Color.fromARGB(
+        pixels[pixelIndex + 3], // Alpha
+        pixels[pixelIndex], // Red
+        pixels[pixelIndex + 1], // Green
+        pixels[pixelIndex + 2], // Blue
+      );
+      print('Target color at tap: $targetColorAtTap');
+
+      // Prevent filling if target color is the new fill color or black outline
+      if (targetColorAtTap == _selectedDrawingColor ||
+          targetColorAtTap == Colors.black) {
+        print(
+          'Skipping fill: Target color is already selected color or black outline.',
+        );
+        return;
+      }
+
+      // 3. Perform the flood fill algorithm
+      ui.Image filledImage = await floodFill(
+        currentImage,
+        tapX,
+        tapY,
+        targetColorAtTap, // Actual color at tap point
+        _selectedDrawingColor, // New color from palette
+      );
+
+      // 4. Update the state with the new filled image
+      setState(() {
+        _currentDrawingImage = filledImage;
+      });
+
+      // 5. Save the updated drawing state to Hive
+      // 1. Await the Future to get the ByteData object (which might be null)
+      final ByteData? filledImageByteData = await filledImage.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      );
+
+      // 2. Now, safely access the buffer if byteData is not null
+      final Uint8List? filledImageData = filledImageByteData?.buffer.asUint8List();
+      if (filledImageData != null) {
+        await widget.pictureService.saveDrawingState(
+          widget.pictureService.currentPicture.id,
+          filledImageData,
+        );
+      }
+      print('Flood fill completed and drawing state saved.');
+    } catch (e) {
+      print('Error during flood fill: $e');
+    }
+  }
+
+  Future<void> _handleNextPicture() async {
+    widget.pictureService.nextPicture();
+    await _loadPictureAndDrawingState(widget.pictureService.currentPicture);
+  }
+
+  Future<void> _handlePreviousPicture() async {
+    widget.pictureService.previousPicture();
+    await _loadPictureAndDrawingState(widget.pictureService.currentPicture);
+  }
+
+  Future<void> _handleClearDrawing() async {
+    // Clear the current in-memory drawing image
+    setState(() {
+      _currentDrawingImage = null; // Or create a blank white image if preferred
+    });
+    // Also clear from persistent storage
+    await widget.pictureService.clearDrawingState(
+      widget.pictureService.currentPicture.id,
     );
-
-    // Call the paint method on the temporary painter with the current canvas and size.
-    // This re-draws the SVG outline onto our recorder's canvas.
-    currentPainter.paint(canvas, size);
-
-    // End recording and convert the Picture to an Image.
-    final ui.Picture picture = recorder.endRecording();
-    return await picture.toImage(size.width.toInt(), size.height.toInt());
+    print('Drawing cleared for ${widget.pictureService.currentPicture.id}');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kids Drawing Pad'),
+        title: Text(
+          'Kids Coloring: ${widget.pictureService.currentPicture.id}',
+        ),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.clear),
-            onPressed: _clearSvgOutline,
-            tooltip: 'Clear SVG Outline',
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _handlePreviousPicture,
+            tooltip: 'Previous Picture',
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadNewSvgOutline,
-            tooltip: 'Load New SVG Outline',
+            icon: const Icon(Icons.arrow_forward),
+            onPressed: _handleNextPicture,
+            tooltip: 'Next Picture',
           ),
         ],
       ),
@@ -117,97 +267,44 @@ class _DrawingScreenState extends State<DrawingScreen> {
         children: <Widget>[
           Expanded(
             child: Container(
-              color: Colors.white,
-              child: CustomPaint(
-                painter: DrawingCanvasPainter(
-                  svgOutlinePath: _currentSvgOutline,
+              color: Colors.white, // Default canvas background
+              child: GestureDetector(
+                onTapUp: _handleFloodFillTap, // Detect taps for flood fill
+                child: CustomPaint(
+                  key: _drawingAreaKey, // Attach GlobalKey here
+                  painter: DrawingCanvasPainter(
+                    svgPictureOutline: _currentSvgOutlinePicture,
+                    backgroundImage:
+                        _currentDrawingImage, // Pass the current drawing image
+                  ),
+                  // The size should be determined by the Expanded widget
+                  // You might consider a Fixed size box for predictable image saving/loading.
+                  // size: Size.infinite,
                 ),
               ),
             ),
           ),
-          // Replace the old color palette placeholder with your new ColorPalette widget
           Container(
             padding: const EdgeInsets.all(8.0),
             color: Colors.blueGrey[100],
             child: Column(
               children: <Widget>[
-                // Your new ColorPalette widget goes here!
                 ColorPalette(
-                  onColorSelected: _handleColorSelected, // Pass your callback
-                  initialColor: _selectedDrawingColor, // Pass the initial color
+                  onColorSelected: _handleColorSelected,
+                  initialColor: _selectedDrawingColor,
                 ),
-                const SizedBox(
-                  height: 10.0,
-                ), // Spacing between palette and buttons
-                // Placeholder for control buttons
+                const SizedBox(height: 10.0),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: <Widget>[
                     ElevatedButton(
-                      onPressed: () async {
-                        if (_currentSvgOutline != null) {
-                          // 1. Get the current image from the drawing canvas
-                          ui.Image currentImage =
-                              await _captureDrawingAreaAsImage();
-
-                          // For demonstration, let's pick a center point for flood fill
-                          final RenderBox renderBox =
-                              context.findRenderObject() as RenderBox;
-                          final Size canvasSize = renderBox.size;
-                          int startX = (canvasSize.width / 2).toInt();
-                          int startY = (canvasSize.height / 2).toInt();
-
-                          // 2. Get the target color (color at the start point)
-                          // This requires reading pixel data from currentImage
-                          // This part is complex. For a simple example, let's assume
-                          // the target color is the background white for the SVG drawing.
-                          // In a real scenario, you'd get the pixel color at (startX, startY)
-                          // from `currentImage`'s raw data.
-                          // For now, let's assume we want to fill the white background.
-                          Color inferredTargetColor = Colors
-                              .white; // Or read from image[startX, startY]
-
-                          // 3. Perform the flood fill
-                          ui.Image filledImage = await floodFill(
-                            currentImage,
-                            startX,
-                            startY,
-                            inferredTargetColor, // Replace this with the actual color of the area to fill
-                            _selectedDrawingColor, // Use the color from your palette
-                          );
-
-                          // 4. Update your state to display the new filled image.
-                          // You might need a new state variable like `ui.Image? _filledImage;`
-                          // and then draw this `_filledImage` in your CustomPaint.
-                          // This requires a CustomPainter that can draw a ui.Image.
-                          // For simplicity, let's just update the _currentSvgOutline for visual demo.
-                          // This is NOT ideal for flood fill as it's meant to draw over an existing image.
-                          // A better approach would be to have a painter that draws a background image,
-                          // and then possibly strokes on top.
-
-                          // To actually display the filled image, you'd modify your painter
-                          // to take an image as well as paths, or draw the image directly.
-                          // Let's create a temporary painter that can draw an image.
-                          setState(() {
-                            // How to display: You need to pass the filledImage to your painter.
-                            // If your painter only handles paths, you'd need a new painter
-                            // or modify DrawingCanvasPainter to accept a background image.
-                            // For now, let's just confirm it worked.
-                            print("Flood fill complete! Image generated.");
-                            // To actually show this, you would change your DrawingCanvasPainter
-                            // or use a new painter that draws a ui.Image.
-                            // Example:
-                            // _displayedFilledImage = filledImage; // Add this state variable
-                          });
-                        }
-                      },
-                      child: const Text('Fill Area'),
+                      onPressed: _handleClearDrawing, // Link to clear drawing
+                      child: const Text('Clear Drawing'),
                     ),
                     ElevatedButton(
-                      onPressed: null,
-                      child: Text('Clear Drawing'),
+                      onPressed: null, // Undo/Redo logic would go here
+                      child: const Text('Undo'),
                     ),
-                    ElevatedButton(onPressed: null, child: Text('Undo')),
                   ],
                 ),
               ],

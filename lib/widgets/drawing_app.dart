@@ -1,8 +1,11 @@
 import 'package:coloring_game/screens/drawing_screen.dart';
 import 'package:flutter/material.dart';
 
+import '../services/picture_service.dart';
+
 class DrawingApp extends StatelessWidget {
-  const DrawingApp({super.key});
+  final PictureService pictureService;
+  const DrawingApp({super.key, required this.pictureService});
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +15,7 @@ class DrawingApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: const DrawingScreen(),
+      home: DrawingScreen(pictureService: pictureService),
     );
   }
 }
