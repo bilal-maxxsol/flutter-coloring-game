@@ -264,6 +264,7 @@ class _DrawingScreenState extends State<DrawingScreen> {
         ],
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Expanded(
             child: Container(

@@ -42,15 +42,15 @@ Future<ui.Image> floodFill(
   final Uint8List pixels = byteData.buffer.asUint8List();
 
   // Convert Color objects to their individual RGBA byte components.
-  final int targetR = targetColor.red;
-  final int targetG = targetColor.green;
-  final int targetB = targetColor.blue;
-  final int targetA = targetColor.alpha;
+  final int targetR = (targetColor.r * 255.0).round() & 0xff;
+  final int targetG = (targetColor.g * 255.0).round() & 0xff;
+  final int targetB = (targetColor.b * 255.0).round() & 0xff;
+  final int targetA = (targetColor.a * 255.0).round() & 0xff;
 
-  final int newFillR = newFillColor.red;
-  final int newFillG = newFillColor.green;
-  final int newFillB = newFillColor.blue;
-  final int newFillA = newFillColor.alpha;
+  final int newFillR = (targetColor.r * 255.0).round() & 0xff;
+  final int newFillG = (targetColor.g * 255.0).round() & 0xff;
+  final int newFillB = (targetColor.b * 255.0).round() & 0xff;
+  final int newFillA = (targetColor.a * 255.0).round() & 0xff;
 
   // Get the color of the starting pixel.
   // Calculate the byte index for the starting pixel. Each pixel is 4 bytes (R,G,B,A).
