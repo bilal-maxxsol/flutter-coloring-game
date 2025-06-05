@@ -1,13 +1,9 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../models/coloring_picture.dart';
 
@@ -34,13 +30,10 @@ class PictureService {
     // Open the Hive box where drawing states will be stored.
     // If the box doesn't exist, Hive will create it.
     _drawingBox = await Hive.openBox<Uint8List>(_boxName);
-    print('Hive box "$_boxName" opened successfully.');
   }
 
-  /// Closes the Hive box when the service is no longer needed.
   Future<void> dispose() async {
     await _drawingBox.close();
-    print('Hive box "$_boxName" closed.');
   }
 
   /// Returns the currently active coloring picture.
@@ -107,7 +100,6 @@ class PictureService {
   /// Returns the new current picture.
   ColoringPicture nextPicture() {
     _currentIndex = (_currentIndex + 1) % _pictures.length;
-    print('Navigated to next picture: ${currentPicture.id}');
     return currentPicture;
   }
 
@@ -116,7 +108,6 @@ class PictureService {
   /// Returns the new current picture.
   ColoringPicture previousPicture() {
     _currentIndex = (_currentIndex - 1 + _pictures.length) % _pictures.length;
-    print('Navigated to previous picture: ${currentPicture.id}');
     return currentPicture;
   }
 
@@ -126,7 +117,6 @@ class PictureService {
   /// [pixelData]: The raw RGBA pixel data (Uint8List) of the canvas.
   Future<void> saveDrawingState(String pictureId, Uint8List pixelData) async {
     await _drawingBox.put(pictureId, pixelData);
-    print('Drawing state for $pictureId saved.');
   }
 
   /// Retrieves the stored drawing state (raw pixel data) for a given picture ID.
@@ -135,17 +125,11 @@ class PictureService {
   /// Returns the raw RGBA pixel data (Uint8List) if found, otherwise null.
   Future<Uint8List?> loadDrawingState(String pictureId) async {
     final Uint8List? pixelData = _drawingBox.get(pictureId);
-    if (pixelData != null) {
-      print('Drawing state for $pictureId loaded.');
-    } else {
-      print('No drawing state found for $pictureId.');
-    }
     return pixelData;
   }
 
   /// Clears the saved drawing state for a specific picture.
   Future<void> clearDrawingState(String pictureId) async {
     await _drawingBox.delete(pictureId);
-    print('Drawing state for $pictureId cleared.');
   }
 }

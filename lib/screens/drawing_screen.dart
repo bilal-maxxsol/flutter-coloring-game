@@ -72,7 +72,6 @@ class _DrawingScreenState extends State<DrawingScreen> {
         ).instantiateCodec();
         final ui.FrameInfo frameInfo = await codec.getNextFrame();
         loadedDrawingImage = frameInfo.image;
-        print('Successfully decoded saved image for ${picture.id}');
       } catch (e) {
         print('Error decoding saved image for ${picture.id}: $e');
         loadedDrawingImage = null; // Fallback if decoding fails
@@ -133,7 +132,6 @@ class _DrawingScreenState extends State<DrawingScreen> {
     setState(() {
       _selectedDrawingColor = color;
     });
-    print('Selected drawing color: $_selectedDrawingColor');
   }
 
   Future<void> _handleFloodFillTap(TapUpDetails details) async {
@@ -146,8 +144,6 @@ class _DrawingScreenState extends State<DrawingScreen> {
     );
     final int tapX = localPosition.dx.toInt();
     final int tapY = localPosition.dy.toInt();
-
-    print('Tapped at: ($tapX, $tapY)');
 
     try {
       // 1. Capture the current visible state of the canvas as an image
@@ -175,7 +171,6 @@ class _DrawingScreenState extends State<DrawingScreen> {
         pixels[pixelIndex + 1], // Green
         pixels[pixelIndex + 2], // Blue
       );
-      print('Target color at tap: $targetColorAtTap');
 
       // Prevent filling if target color is the new fill color or black outline
       if (targetColorAtTap == _selectedDrawingColor ||
@@ -207,14 +202,14 @@ class _DrawingScreenState extends State<DrawingScreen> {
       );
 
       // 2. Now, safely access the buffer if byteData is not null
-      final Uint8List? filledImageData = filledImageByteData?.buffer.asUint8List();
+      final Uint8List? filledImageData = filledImageByteData?.buffer
+          .asUint8List();
       if (filledImageData != null) {
         await widget.pictureService.saveDrawingState(
           widget.pictureService.currentPicture.id,
           filledImageData,
         );
       }
-      print('Flood fill completed and drawing state saved.');
     } catch (e) {
       print('Error during flood fill: $e');
     }
@@ -239,7 +234,6 @@ class _DrawingScreenState extends State<DrawingScreen> {
     await widget.pictureService.clearDrawingState(
       widget.pictureService.currentPicture.id,
     );
-    print('Drawing cleared for ${widget.pictureService.currentPicture.id}');
   }
 
   @override
@@ -270,7 +264,7 @@ class _DrawingScreenState extends State<DrawingScreen> {
             child: Container(
               color: Colors.white, // Default canvas background
               child: GestureDetector(
-                onTapUp: _handleFloodFillTap, // Detect taps for flood fill
+                onTapUp: _handleFloodFillTap,
                 child: CustomPaint(
                   key: _drawingAreaKey, // Attach GlobalKey here
                   painter: DrawingCanvasPainter(

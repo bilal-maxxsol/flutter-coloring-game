@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui; // Alias for dart:ui
+import 'package:image/image.dart' as img;
 
 /// Performs an iterative (queue-based) flood fill algorithm on a given image.
 ///
@@ -25,78 +26,94 @@ Future<ui.Image> floodFill(
   final int width = image.width;
   final int height = image.height;
 
+
   // --- 1. Initial Checks and Setup ---
-  // Ensure the starting coordinates are within the image bounds.
   if (startX < 0 || startX >= width || startY < 0 || startY >= height) {
-    return image; // Start point out of bounds, no fill possible.
+    print('FloodFill: Start point ($startX, $startY) out of bounds.');
+    return image;
   }
 
-  // Convert the image to raw RGBA 8888 byte data for pixel manipulation.
-  // This is an asynchronous operation.
-  final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final ByteData? byteData = await image.toByteData(
+    format: ui.ImageByteFormat.rawRgba,
+  );
   if (byteData == null) {
-    return image; // Could not get byte data.
+    print('FloodFill: Could not get byte data from image.');
+    return image;
   }
 
-  // Create a mutable Uint8List view of the byte data for easier pixel access.
   final Uint8List pixels = byteData.buffer.asUint8List();
 
-  // Convert Color objects to their individual RGBA byte components.
-  final int targetR = (targetColor.r * 255.0).round() & 0xff;
-  final int targetG = (targetColor.g * 255.0).round() & 0xff;
-  final int targetB = (targetColor.b * 255.0).round() & 0xff;
-  final int targetA = (targetColor.a * 255.0).round() & 0xff;
+  // Convert targetColor to its RGBA byte components.
+  final int targetValue = targetColor.toARGB32(); // Use toARGB32() now
+  final int targetA = (targetValue >> 24) & 0xFF;
+  final int targetR = (targetValue >> 16) & 0xFF;
+  final int targetG = (targetValue >> 8) & 0xFF;
+  final int targetB = targetValue & 0xFF;
 
-  final int newFillR = (targetColor.r * 255.0).round() & 0xff;
-  final int newFillG = (targetColor.g * 255.0).round() & 0xff;
-  final int newFillB = (targetColor.b * 255.0).round() & 0xff;
-  final int newFillA = (targetColor.a * 255.0).round() & 0xff;
+  // FIXED: Convert newFillColor to its RGBA byte components.
+  final int newFillValue = newFillColor.toARGB32(); // Use toARGB32() now
+  final int newFillA = (newFillValue >> 24) & 0xFF;
+  final int newFillR = (newFillValue >> 16) & 0xFF;
+  final int newFillG = (newFillValue >> 8) & 0xFF;
+  final int newFillB = newFillValue & 0xFF;
 
-  // Get the color of the starting pixel.
-  // Calculate the byte index for the starting pixel. Each pixel is 4 bytes (R,G,B,A).
   final int startIndex = (startY * width + startX) * 4;
 
+  // Get the actual color of the starting pixel in the image.
+  final int startPixelR = pixels[startIndex];
+  final int startPixelG = pixels[startIndex + 1];
+  final int startPixelB = pixels[startIndex + 2];
+  final int startPixelA = pixels[startIndex + 3];
+
+  // Removed print statement
+
   // Check if the starting pixel's color is already the new fill color.
-  // If so, there's nothing to do.
-  if (pixels[startIndex] == newFillR &&
-      pixels[startIndex + 1] == newFillG &&
-      pixels[startIndex + 2] == newFillB &&
-      pixels[startIndex + 3] == newFillA) {
-    return image; // Already filled with the new color.
+  if (startPixelR == newFillR &&
+      startPixelG == newFillG &&
+      startPixelB == newFillB &&
+      startPixelA == newFillA) {
+    print('FloodFill: Start pixel already has the new fill color. Returning.');
+    return image;
   }
 
-  // Double-check: If the color at startX, startY is different from `targetColor`
-  // passed into the function, it means the user clicked on an already
-  // changed area or a boundary. In a typical drawing app, `targetColor`
-  // would be inferred from the `image` at `(startX, startY)`.
-  // For this function, we'll assume `targetColor` is the exact color to replace.
-  // If the color at the start point doesn't match `targetColor`, we don't proceed.
-  if (pixels[startIndex] != targetR ||
-      pixels[startIndex + 1] != targetG ||
-      pixels[startIndex + 2] != targetB ||
-      pixels[startIndex + 3] != targetA) {
-    return image; // Start pixel does not match the target color, no fill.
+  // Check if the starting pixel's color matches the target color to replace.
+  // If it doesn't, it means the user clicked on a boundary or an already different area.
+  if (startPixelR != targetR ||
+      startPixelG != targetG ||
+      startPixelB != targetB ||
+      startPixelA != targetA) {
+    print(
+      'FloodFill: Start pixel color does not match target color. Returning. (Actual: $startPixelR,$startPixelG,$startPixelB,$startPixelA vs Target: $targetR,$targetG,$targetB,$targetA)',
+    );
+    return image;
   }
-
 
   // --- 2. Iterative Flood Fill Algorithm (Queue-based) ---
-  // Using a List as a queue and managing it with a head pointer for efficiency
-  // (avoids constant reallocation of the list if using removeAt(0)).
   final List<List<int>> queue = [];
-  queue.add([startX, startY]); // Add the starting pixel to the queue
+  queue.add([startX, startY]);
 
-  int head = 0; // Manual queue head pointer
+  // Immediately change the color of the starting pixel.
+  pixels[startIndex] = newFillR;
+  pixels[startIndex + 1] = newFillG;
+  pixels[startIndex + 2] = newFillB;
+  pixels[startIndex + 3] = newFillA;
+
+  int head = 0;
+
+  // A boolean array to keep track of visited pixels to prevent infinite loops and re-processing.
+  // This is crucial for efficiency and correctness.
+  final List<bool> visited = List.filled(width * height, false);
+  visited[startY * width + startX] = true; // Mark starting pixel as visited
 
   while (head < queue.length) {
-    final List<int> currentPoint = queue[head++]; // Dequeue the current pixel
+    final List<int> currentPoint = queue[head++];
     final int cx = currentPoint[0];
     final int cy = currentPoint[1];
 
-    // Define the 4 directions to check (right, left, down, up)
     final List<List<int>> directions = [
-      [1, 0],  // Right
+      [1, 0], // Right
       [-1, 0], // Left
-      [0, 1],  // Down
+      [0, 1], // Down
       [0, -1], // Up
     ];
 
@@ -104,42 +121,72 @@ Future<ui.Image> floodFill(
       final int nx = cx + dir[0];
       final int ny = cy + dir[1];
 
-      // Calculate the byte index for the potential neighbor pixel.
-      final int neighborPixelIndex = (ny * width + nx) * 4;
+      // Calculate the 1D index for visited array
+      final int newIndex1D = ny * width + nx;
 
-      // Check if the neighbor is within bounds AND its color matches the target color.
-      if (nx >= 0 && nx < width && ny >= 0 && ny < height &&
-          pixels[neighborPixelIndex] == targetR &&
-          pixels[neighborPixelIndex + 1] == targetG &&
-          pixels[neighborPixelIndex + 2] == targetB &&
-          pixels[neighborPixelIndex + 3] == targetA) {
-        
-        // If it matches, change its color to the new fill color immediately
-        // and enqueue it for further processing.
-        pixels[neighborPixelIndex] = newFillR;
-        pixels[neighborPixelIndex + 1] = newFillG;
-        pixels[neighborPixelIndex + 2] = newFillB;
-        pixels[neighborPixelIndex + 3] = newFillA;
+      // Check if the neighbor is within bounds AND has not been visited yet.
+      if (nx >= 0 &&
+          nx < width &&
+          ny >= 0 &&
+          ny < height &&
+          !visited[newIndex1D]) {
+        final int neighborPixelIndex = newIndex1D * 4;
 
-        queue.add([nx, ny]); // Enqueue the neighbor
+        // Get the current color of the neighbor pixel from the pixel data.
+        final int neighborR = pixels[neighborPixelIndex];
+        final int neighborG = pixels[neighborPixelIndex + 1];
+        final int neighborB = pixels[neighborPixelIndex + 2];
+        final int neighborA = pixels[neighborPixelIndex + 3];
+
+        // Check if the neighbor's color matches the original target color.
+        if (neighborR == targetR &&
+            neighborG == targetG &&
+            neighborB == targetB &&
+            neighborA == targetA) {
+          // If it matches, change its color to the new fill color,
+          // mark it as visited, and enqueue it for further processing.
+          pixels[neighborPixelIndex] = newFillR;
+          pixels[neighborPixelIndex + 1] = newFillG;
+          pixels[neighborPixelIndex + 2] = newFillB;
+          pixels[neighborPixelIndex + 3] = newFillA;
+
+          visited[newIndex1D] = true; // Mark as visited
+          queue.add([nx, ny]); // Enqueue the neighbor
+        }
       }
     }
   }
 
   // --- 3. Create New ui.Image from Modified Pixels ---
-  // Create an ImmutableBuffer from the modified Uint8List.
-  final ui.ImmutableBuffer immutableBuffer = await ui.ImmutableBuffer.fromUint8List(pixels);
-
-  // Decode the new image from the modified pixel data.
-  // The 'pixelFormat' argument is required here. We specify rgba8888 as
-  // that's what we used when getting the byte data.
-  final ui.Codec codec = await ui.ImageDescriptor.raw(
-    immutableBuffer, // Use the ImmutableBuffer
+  try {
+  // 1. Create an img.Image from your raw Uint8List pixels
+  img.Image? baseImage = img.Image.fromBytes(
     width: width,
     height: height,
-    rowBytes: width * 4, // 4 bytes per pixel (RGBA)
-    pixelFormat: ui.PixelFormat.rgba8888, // Correctly added the required pixelFormat
-  ).instantiateCodec();
+    bytes: pixels.buffer,
+    format: img.Format.uint8,
+    numChannels: 4,
+    order: img.ChannelOrder.rgba,
+  );
+
+  if (baseImage == null) {
+    print('🚨 FloodFill: Failed to create img.Image from raw pixels.');
+    // Fallback or error handling
+    return image; // Return original image if conversion fails
+  }
+
+  // 2. Encode the img.Image to PNG format
+  final Uint8List encodedPng = img.encodePng(baseImage);
+
+  // 3. Use Flutter's ui.instantiateImageCodec to decode the PNG and get a ui.Image
+  ui.Codec codec = await ui.instantiateImageCodec(encodedPng);
   final ui.FrameInfo frameInfo = await codec.getNextFrame();
+
   return frameInfo.image;
+
+} catch (e) {
+  print('🚨 Error during image reconstruction with package:image: $e');
+  // Re-throw or return original image on failure
+  return image;
+}
 }

@@ -14,6 +14,7 @@ dependencies:
   hive: ^2.2.3 # For local NoSQL database
   hive_flutter: ^1.1.0 # Flutter integration for Hive
   path_drawing: ^1.0.1 # For parsing SVG path strings to ui.Path (if needed)
+  image: ^4.5.4
 
 dev_dependencies:
   flutter_test:
