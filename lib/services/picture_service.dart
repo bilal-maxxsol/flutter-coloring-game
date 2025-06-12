@@ -16,7 +16,7 @@ class PictureService {
   final List<ColoringPicture> _pictures = [
     ColoringPicture(id: 'pic_1', svgAssetPath: 'assets/svgs/shape_1.svg'),
     ColoringPicture(id: 'pic_2', svgAssetPath: 'assets/svgs/shape_2.svg'),
-    ColoringPicture(id: 'pic_3', svgAssetPath: 'assets/svgs/shape_3.svg'),
+    ColoringPicture(id: 'pic_3', svgAssetPath: 'assets/svgs/goku.svg'),
     ColoringPicture(id: 'pic_4', svgAssetPath: 'assets/svgs/shape_4.svg'),
   ];
 
